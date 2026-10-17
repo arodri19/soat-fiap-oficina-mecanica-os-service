@@ -1,0 +1,241 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ATTENDANT
+  MECHANIC
+}
+
+// Fase 4: o ciclo de vida da OS passa a ser conduzido pela saga (orçamento →
+// aprovação → pagamento → execução). AGUARDANDO_PAGAMENTO, AGUARDANDO_EXECUCAO e
+// CANCELADA (estado final das compensações) foram adicionados nesta fase.
+enum OrderStatus {
+  RECEBIDA
+  EM_DIAGNOSTICO
+  AGUARDANDO_APROVACAO
+  AGUARDANDO_PAGAMENTO
+  AGUARDANDO_EXECUCAO
+  EM_EXECUCAO
+  FINALIZADA
+  ENTREGUE
+  CANCELADA
+}
+
+enum SagaStatus {
+  RUNNING
+  COMPLETED
+  COMPENSATING
+  COMPENSATED
+  FAILED
+}
+
+enum OutboxStatus {
+  PENDING
+  SENT
+}
+
+model User {
+  id        Int      @id @default(autoincrement())
+  name      String
+  email     String   @unique
+  password  String
+  role      UserRole
+  createdAt DateTime @default(now())
+}
+
+model ClientPF {
+  id        Int            @id @default(autoincrement())
+  name      String
+  cpf       String         @unique
+  email     String
+  address   String
+  number    String
+  state     String
+  cep       String
+  vehicles  Vehicle[]
+  orders    OrderService[]
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+}
+
+model ClientPJ {
+  id               Int            @id @default(autoincrement())
+  name             String
+  fantasyName      String
+  companyName      String
+  cnpj             String         @unique
+  email            String
+  address          String
+  number           String
+  state            String
+  cep              String
+  legalResponsible String
+  orders           OrderService[]
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+}
+
+model Vehicle {
+  id         Int            @id @default(autoincrement())
+  plate      String         @unique
+  model      String
+  year       Int
+  color      String
+  clientPF   ClientPF       @relation(fields: [clientPFId], references: [id])
+  clientPFId Int
+  orders     OrderService[]
+}
+
+model Service {
+  id            Int                   @id @default(autoincrement())
+  name          String
+  slaMinutes    Int
+  price         Float                 @default(0)
+  orderServices OrderServiceService[]
+}
+
+model Part {
+  id                   Int                       @id @default(autoincrement())
+  name                 String
+  type                 String
+  model                String
+  color                String
+  quantity             Int                       @default(0)
+  price                Float                     @default(0)
+  orderServiceServices OrderServiceServicePart[]
+}
+
+model OrderService {
+  id           Int                   @id @default(autoincrement())
+  externalId   String                @unique @default(uuid())
+  status       OrderStatus           @default(RECEBIDA)
+  description  String
+  mechanicName String?
+  // Valor oficial do orçamento, preenchido quando o billing-service confirma a
+  // criação do orçamento (BudgetCreated). O orçamento em si vive no billing-service.
+  budgetValue  Float?
+  // Id do orçamento no billing-service (referência, não FK — outro banco).
+  budgetId     String?
+  cancelReason String?
+  startAt      DateTime?
+  endAt        DateTime?
+  createdAt    DateTime              @default(now())
+  updatedAt    DateTime              @updatedAt
+  clientPF     ClientPF?             @relation(fields: [clientPFId], references: [id])
+  clientPFId   Int?
+  clientPJ     ClientPJ?             @relation(fields: [clientPJId], references: [id])
+  clientPJId   Int?
+  vehicle      Vehicle               @relation(fields: [vehicleId], references: [id])
+  vehicleId    Int
+  services     OrderServiceService[]
+  history      OrderStatusHistory[]
+  saga         SagaInstance?
+}
+
+model OrderServiceService {
+  id             Int                       @id @default(autoincrement())
+  orderService   OrderService              @relation(fields: [orderServiceId], references: [id], onDelete: Cascade)
+  orderServiceId Int
+  service        Service                   @relation(fields: [serviceId], references: [id])
+  serviceId      Int
+  // Preço do serviço no momento da abertura da OS (snapshot enviado ao orçamento).
+  unitPrice      Float                     @default(0)
+  parts          OrderServiceServicePart[]
+  createdAt      DateTime                  @default(now())
+}
+
+model OrderServiceServicePart {
+  id                    Int                 @id @default(autoincrement())
+  orderServiceService   OrderServiceService @relation(fields: [orderServiceServiceId], references: [id], onDelete: Cascade)
+  orderServiceServiceId Int
+  part                  Part                @relation(fields: [partId], references: [id])
+  partId                Int
+  quantity              Int                 @default(1)
+  unitPrice             Float               @default(0)
+  createdAt             DateTime            @default(now())
+}
+
+// Histórico de status da OS (requisito "consulta de status e histórico").
+model OrderStatusHistory {
+  id         Int          @id @default(autoincrement())
+  order      OrderService @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderId    Int
+  fromStatus OrderStatus?
+  toStatus   OrderStatus
+  source     String
+  note       String?
+  createdAt  DateTime     @default(now())
+
+  @@index([orderId])
+}
+
+// Estado persistido da saga orquestrada (uma por OS). `version` implementa
+// controle de concorrência otimista: duas réplicas processando respostas da
+// mesma saga ao mesmo tempo não sobrescrevem uma à outra.
+model SagaInstance {
+  id                   String       @id @default(uuid())
+  order                OrderService @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderId              Int          @unique
+  type                 String
+  status               SagaStatus
+  currentStep          String
+  budgetId             String?
+  paymentId            String?
+  paymentUrl           String?
+  paymentConfirmed     Boolean      @default(false)
+  executionQueued      Boolean      @default(false)
+  executionTerminal    Boolean      @default(false)
+  pendingCompensations String[]     @default([])
+  failureReason        String?
+  version              Int          @default(0)
+  stepStartedAt        DateTime     @default(now())
+  createdAt            DateTime     @default(now())
+  updatedAt            DateTime     @updatedAt
+  events               SagaEvent[]
+
+  @@index([status, currentStep, stepStartedAt])
+}
+
+// Trilha de auditoria da saga: comandos enviados, respostas recebidas, compensações.
+model SagaEvent {
+  id        Int          @id @default(autoincrement())
+  saga      SagaInstance @relation(fields: [sagaId], references: [id], onDelete: Cascade)
+  sagaId    String
+  kind      String
+  type      String
+  payload   Json?
+  createdAt DateTime     @default(now())
+
+  @@index([sagaId])
+}
+
+// Transactional Outbox: a mensagem é gravada na MESMA transação da mudança de
+// estado e publicada no SQS depois, pelo OutboxRelay — nunca há OS atualizada
+// sem o comando correspondente (nem comando sem OS atualizada).
+model OutboxMessage {
+  id          String       @id
+  destination String
+  type        String
+  envelope    Json
+  status      OutboxStatus @default(PENDING)
+  attempts    Int          @default(0)
+  lastError   String?
+  createdAt   DateTime     @default(now())
+  sentAt      DateTime?
+
+  @@index([status, createdAt])
+}
+
+// Inbox (consumidor idempotente): SQS entrega "at-least-once"; uma mensagem já
+// processada é descartada sem efeito colateral.
+model ProcessedMessage {
+  messageId   String   @id
+  type        String
+  processedAt DateTime @default(now())
+}

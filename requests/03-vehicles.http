@@ -1,0 +1,19 @@
+@baseUrl = http://localhost:4000/api
+@token = INSIRA_O_TOKEN_AQUI
+
+### Listar Veículos
+GET {{baseUrl}}/vehicles
+Authorization: Bearer {{token}}
+
+### Criar Veículo
+POST {{baseUrl}}/vehicles
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "plate": "ABC-1234",
+  "model": "Honda Civic",
+  "year": 2020,
+  "color": "Prata",
+  "clientPFId": "ID_DO_CLIENTE_AQUI"
+}

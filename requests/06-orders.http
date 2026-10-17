@@ -1,0 +1,44 @@
+@baseUrl = http://localhost:4000/api
+@token = COLE_O_TOKEN_DO_ATENDENTE
+@orderId = 1
+
+### Abrir OS (inicia a saga: CreateBudget → billing-service)
+POST {{baseUrl}}/orders
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "description": "Revisão geral de 10.000km",
+  "clientPFId": 1,
+  "vehicleId": 1,
+  "services": [
+    { "serviceId": 1, "parts": [{ "partId": 1, "quantity": 2 }, { "partId": 2, "quantity": 1 }] }
+  ]
+}
+
+### Listar OS ativas (prioridade de atendimento)
+GET {{baseUrl}}/orders?page=1&limit=20
+Authorization: Bearer {{token}}
+
+### Detalhe da OS + resumo da saga
+GET {{baseUrl}}/orders/{{orderId}}
+Authorization: Bearer {{token}}
+
+### Visão consolidada (REST síncrono no billing e no exec-prod)
+GET {{baseUrl}}/orders/{{orderId}}/progress
+Authorization: Bearer {{token}}
+
+### Histórico de status + trilha da saga
+GET {{baseUrl}}/orders/{{orderId}}/history
+Authorization: Bearer {{token}}
+
+### Cancelar OS (dispara compensações)
+POST {{baseUrl}}/orders/{{orderId}}/cancel
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{ "reason": "Cliente desistiu do serviço" }
+
+### Entregar veículo (FINALIZADA → ENTREGUE)
+POST {{baseUrl}}/orders/{{orderId}}/deliver
+Authorization: Bearer {{token}}
