@@ -118,7 +118,7 @@ docker compose up --build          # Postgres + LocalStack (SQS/DynamoDB) + 3 se
 - Login: `admin@oficina.com` / `Admin123!` · token de cliente local: `node scripts/client-token.js 1`
 - Sem credenciais do Mercado Pago o billing usa o gateway **fake** (pagamento simulado em
   `POST /api/payments/order/:id/simulate`). Com credenciais de teste:
-  `PAYMENT_GATEWAY=mercadopago MERCADOPAGO_ACCESS_TOKEN=TEST-... docker compose up`.
+  `PAYMENT_GATEWAY=mercadopago MERCADOPAGO_ACCESS_TOKEN=<token de teste> docker compose up`.
 
 ## Testes e qualidade
 
