@@ -22,6 +22,9 @@ spec:
       labels:
         app: os-service
         app.kubernetes.io/part-of: oficina-mecanica
+      annotations:
+        # Preenchido pelo CD com o hash do ConfigMap + Secret — mudança de configuração recria os pods
+        checksum/config: "CONFIG_HASH"
     spec:
       # Encerramento gracioso: o processo para de consumir a fila e de publicar o
       # outbox antes de sair (SIGTERM tratado em src/index.js).

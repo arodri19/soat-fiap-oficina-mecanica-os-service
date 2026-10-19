@@ -151,7 +151,8 @@ jobs:
             --from-literal=NEW_RELIC_LICENSE_KEY="${{ secrets.NEW_RELIC_LICENSE_KEY }}" \
             --from-literal=NEW_RELIC_ACCOUNT_ID="${{ vars.NEWRELIC_ACCOUNT_ID }}" \
             --from-literal=NEW_RELIC_API_KEY="${{ secrets.NEWRELIC_API_KEY }}" \
-            --dry-run=client -o yaml | kubectl apply -f -
+            --dry-run=client -o yaml > "$RUNNER_TEMP/os-service-secrets.yaml"
+          kubectl apply -f "$RUNNER_TEMP/os-service-secrets.yaml"
 
       - name: metrics-server (necessário para o HPA)
         if: steps.infra.outputs.ready == 'true'
@@ -160,7 +161,10 @@ jobs:
       - name: Aplicar Deployment, Services e HPA (imagem ${{ needs.build-and-push.outputs.image }})
         if: steps.infra.outputs.ready == 'true'
         run: |
-          sed -i "s|arodri19/oficina-os-service:[^ ]*|${{ needs.build-and-push.outputs.image }}|g" k8s/deployment.yaml
+          # checksum de ConfigMap + Secret no pod: reexecutar o CD só com configuração
+          # nova (mesma imagem) também recria os pods
+          CONFIG_HASH=$(cat k8s/configmap.yaml "$RUNNER_TEMP/os-service-secrets.yaml" | sha256sum | cut -c1-16)
+          sed -i "s|arodri19/oficina-os-service:[^ ]*|${{ needs.build-and-push.outputs.image }}|g; s|CONFIG_HASH|$CONFIG_HASH|" k8s/deployment.yaml
           kubectl apply -f k8s/deployment.yaml -f k8s/service.yaml -f k8s/hpa.yaml
           kubectl rollout status deployment/os-service -n "$NAMESPACE" --timeout=300s
 
