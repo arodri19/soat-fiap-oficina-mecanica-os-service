@@ -49,8 +49,6 @@ jobs:
     runs-on: ubuntu-latest
     needs: ci
     environment: oficina-prd
-    outputs:
-      image: ${{ steps.meta.outputs.image }}
     steps:
       - name: Checkout do código
         uses: actions/checkout@v7.0.1
@@ -65,13 +63,15 @@ jobs:
         id: meta
         run: |
           SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
-          echo "image=${{ env.DOCKERHUB_REPOSITORY }}:${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+          echo "image=${{ env.DOCKERHUB_REPOSITORY }}:${{ github.sha }}" >> "$GITHUB_OUTPUT"
+          echo "short=${{ env.DOCKERHUB_REPOSITORY }}:${SHORT_SHA}" >> "$GITHUB_OUTPUT"
           echo "branch=${{ env.DOCKERHUB_REPOSITORY }}:${GITHUB_REF_NAME//\//-}" >> "$GITHUB_OUTPUT"
 
       - name: Build e push
         run: |
           docker build --target production \
             --tag "${{ steps.meta.outputs.image }}" \
+            --tag "${{ steps.meta.outputs.short }}" \
             --tag "${{ steps.meta.outputs.branch }}" \
             --tag "${{ env.DOCKERHUB_REPOSITORY }}:latest" .
           docker push --all-tags "${{ env.DOCKERHUB_REPOSITORY }}"
@@ -158,13 +158,13 @@ jobs:
         if: steps.infra.outputs.ready == 'true'
         run: kubectl apply -f k8s/metrics-server.yaml
 
-      - name: Aplicar Deployment, Services e HPA (imagem ${{ needs.build-and-push.outputs.image }})
+      - name: Aplicar Deployment, Services e HPA (imagem ${{ env.DOCKERHUB_REPOSITORY }}:${{ github.sha }})
         if: steps.infra.outputs.ready == 'true'
         run: |
           # checksum de ConfigMap + Secret no pod: reexecutar o CD só com configuração
           # nova (mesma imagem) também recria os pods
           CONFIG_HASH=$(cat k8s/configmap.yaml "$RUNNER_TEMP/os-service-secrets.yaml" | sha256sum | cut -c1-16)
-          sed -i "s|arodri19/oficina-os-service:[^ ]*|${{ needs.build-and-push.outputs.image }}|g; s|CONFIG_HASH|$CONFIG_HASH|" k8s/deployment.yaml
+          sed -i "s|arodri19/oficina-os-service:[^ ]*|${{ env.DOCKERHUB_REPOSITORY }}:${{ github.sha }}|g; s|CONFIG_HASH|$CONFIG_HASH|" k8s/deployment.yaml
           kubectl apply -f k8s/deployment.yaml -f k8s/service.yaml -f k8s/hpa.yaml
           kubectl rollout status deployment/os-service -n "$NAMESPACE" --timeout=300s
 
@@ -188,8 +188,9 @@ jobs:
             echo "### Deploy os-service — ${{ job.status }}"
             echo "| Campo | Valor |"
             echo "|---|---|"
-            echo "| Imagem | \`${{ needs.build-and-push.outputs.image }}\` |"
+            echo "| Imagem | \`${{ env.DOCKERHUB_REPOSITORY }}:${{ github.sha }}\` |"
             echo "| Ambiente | \`$TARGET_ENV\` |"
             echo "| Cluster pronto | \`${{ steps.infra.outputs.ready }}\` |"
             [ -n "$HOST" ] && echo "| Swagger | http://$HOST/api-docs |"
+            true
           } >> "$GITHUB_STEP_SUMMARY"
