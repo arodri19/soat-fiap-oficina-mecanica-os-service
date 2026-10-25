@@ -164,11 +164,20 @@ jobs:
           kubectl apply -f k8s/deployment.yaml -f k8s/service.yaml -f k8s/hpa.yaml
           kubectl rollout status deployment/os-service -n "$NAMESPACE" --timeout=300s
 
+      # deploy/os-service: o kubectl escolhe um pod ATIVO do Deployment. Selecionar
+      # por status=Running pegava, logo após o rollout, o pod antigo que já estava
+      # sendo encerrado ("pods ... not found"). Retry cobre essa janela.
       - name: Seed inicial (só em banco vazio)
         if: steps.infra.outputs.ready == 'true'
         run: |
-          POD=$(kubectl get pods -n "$NAMESPACE" -l app=os-service --field-selector=status.phase=Running -o jsonpath='{.items[0].metadata.name}')
-          kubectl exec -n "$NAMESPACE" "$POD" -- node prisma/seed.js --if-empty
+          for i in 1 2 3 4 5; do
+            if kubectl exec -n "$NAMESPACE" deploy/os-service -c os-service -- node prisma/seed.js --if-empty; then
+              exit 0
+            fi
+            echo "Tentativa $i falhou — aguardando o pod novo estabilizar..."
+            sleep 10
+          done
+          exit 1
 
       - name: Smoke test (/health dentro do cluster)
         if: steps.infra.outputs.ready == 'true'
