@@ -64,5 +64,5 @@ completa em um endpoint, participantes desacoplados entre si, e timeouts por eta
 | Serviço | Statements | Branches | Functions | Lines | BDD |
 |---|---|---|---|---|---|
 | os-service | 94.64% | 86.07% | 95.18% | 95.80% | `saga-ordem-servico.feature` (fluxo completo + 5 compensações) |
-| billing-service | 99.32% | 96.88% | 99.22% | 99.62% | `orcamento-pagamento.feature` |
+| billing-service | 99.35% | 97.01% | 99.27% | 99.63% | `orcamento-pagamento.feature` |
 | exec-prod-service | 98.99% | 95.26% | 99.05% | 99.44% | `fila-execucao.feature` |
