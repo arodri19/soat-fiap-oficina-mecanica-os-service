@@ -1,0 +1,114 @@
+# ╔══════════════════════════════════════════════════════════════════════╗
+# ║  FASE 04 — Fluxo completo da OS passando pelos 3 microsserviços      ║
+# ║  Extensão: REST Client (humao.rest-client) — "Send Request"          ║
+# ║                                                                      ║
+# ║  Ambiente: docker compose up --build (neste repositório)             ║
+# ║    os-service :4000 | billing-service :4100 | exec-prod-service :4200║
+# ║                                                                      ║
+# ║  Token de cliente (rotas /track): node scripts/client-token.js 1     ║
+# ║  (em produção vem da Lambda POST /auth/cpf do repositório serverless)║
+# ╚══════════════════════════════════════════════════════════════════════╝
+
+@os      = http://localhost:4000/api
+@billing = http://localhost:4100/api
+@exec    = http://localhost:4200/api
+
+@staffToken  = COLE_O_TOKEN_DO_LOGIN
+@clientToken = COLE_O_TOKEN_DE_CLIENTE
+@orderId     = 3
+@externalId  = COLE_O_EXTERNAL_ID
+
+### 0. Login do atendente (copie o token para @staffToken)
+POST {{os}}/auth/login
+Content-Type: application/json
+
+{ "email": "admin@oficina.com", "password": "Admin123!" }
+
+### 1. Abrir OS → saga envia CreateBudget ao billing-service
+POST {{os}}/orders
+Content-Type: application/json
+Authorization: Bearer {{staffToken}}
+
+{
+  "description": "Troca de óleo e filtro",
+  "clientPFId": 1,
+  "vehicleId": 1,
+  "services": [{ "serviceId": 1, "parts": [{ "partId": 1, "quantity": 1 }, { "partId": 2, "quantity": 1 }] }]
+}
+
+### 2. Orçamento criado pelo billing (DynamoDB) → OS em AGUARDANDO_APROVACAO
+GET {{billing}}/budgets/order/{{orderId}}
+Authorization: Bearer {{staffToken}}
+
+### 3. Cliente consulta a OS
+GET {{os}}/track/{{externalId}}
+Authorization: Bearer {{clientToken}}
+
+### 4a. Cliente APROVA → RequestPayment → preferência no Mercado Pago
+POST {{os}}/track/{{externalId}}/approve
+Authorization: Bearer {{clientToken}}
+
+### 4b. (alternativa) Cliente RECUSA → compensação CancelBudget
+POST {{os}}/track/{{externalId}}/reject
+Content-Type: application/json
+Authorization: Bearer {{clientToken}}
+
+{ "reason": "Valor acima do esperado" }
+
+### 5. Link de pagamento (saga.paymentUrl / billing.data.payment.checkoutUrl)
+GET {{os}}/track/{{externalId}}
+Authorization: Bearer {{clientToken}}
+
+### 6a. [gateway fake] Simular pagamento APROVADO (com Mercado Pago real, o webhook faz isso)
+POST {{billing}}/payments/order/{{orderId}}/simulate
+Content-Type: application/json
+Authorization: Bearer {{staffToken}}
+
+{ "status": "approved" }
+
+### 6b. [gateway fake] Simular pagamento RECUSADO → compensação
+POST {{billing}}/payments/order/{{orderId}}/simulate
+Content-Type: application/json
+Authorization: Bearer {{staffToken}}
+
+{ "status": "rejected" }
+
+### 7. Fila de execução (exec-prod, DynamoDB)
+GET {{exec}}/executions/queue
+Authorization: Bearer {{staffToken}}
+
+### 8. Mecânico inicia diagnóstico → OS EM_DIAGNOSTICO
+POST {{exec}}/executions/{{orderId}}/diagnosis/start
+Content-Type: application/json
+Authorization: Bearer {{staffToken}}
+
+{ "mechanicName": "Roberto Silva" }
+
+### 9. Mecânico inicia reparo → OS EM_EXECUCAO
+POST {{exec}}/executions/{{orderId}}/repair/start
+Content-Type: application/json
+Authorization: Bearer {{staffToken}}
+
+{ "diagnosisNotes": "Óleo vencido, filtro saturado" }
+
+### 10a. Mecânico finaliza → OS FINALIZADA, saga COMPLETED
+POST {{exec}}/executions/{{orderId}}/complete
+Content-Type: application/json
+Authorization: Bearer {{staffToken}}
+
+{ "notes": "Troca realizada, teste de rodagem ok" }
+
+### 10b. (alternativa) Mecânico reporta falha → estorno do pagamento (compensação)
+POST {{exec}}/executions/{{orderId}}/fail
+Content-Type: application/json
+Authorization: Bearer {{staffToken}}
+
+{ "reason": "Peça incompatível com o veículo" }
+
+### 11. Histórico da OS + trilha completa da saga
+GET {{os}}/orders/{{orderId}}/history
+Authorization: Bearer {{staffToken}}
+
+### 12. Entrega do veículo
+POST {{os}}/orders/{{orderId}}/deliver
+Authorization: Bearer {{staffToken}}

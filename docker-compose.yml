@@ -1,0 +1,110 @@
+# Ambiente local COMPLETO da Fase 4 (os-service + billing-service + exec-prod-service).
+#
+# Pré-requisito: clonar os três repositórios lado a lado:
+#   ./soat-fiap-oficina-mecanica-os-service       (este)
+#   ./soat-fiap-oficina-mecanica-billing-service
+#   ./soat-fiap-oficina-mecanica-exec-prod
+#
+#   docker compose up --build
+#
+# LocalStack emula SQS e DynamoDB (mesmos nomes de filas/tabelas da AWS).
+# Sem MERCADOPAGO_ACCESS_TOKEN, o billing usa o gateway "fake" — o pagamento é
+# simulado via POST /api/payments/order/:orderId/simulate (ver README).
+x-aws-local: &aws-local
+  AWS_REGION: us-east-1
+  AWS_ACCESS_KEY_ID: test
+  AWS_SECRET_ACCESS_KEY: test
+  QUEUE_PREFIX: oficina-mecanica-dev
+  NEW_RELIC_ENABLED: "false"
+  JWT_SECRET: super-secret-change-me
+  LOG_LEVEL: info
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: oficina
+    ports:
+      - ${DB_HOST_PORT:-5432}:5432
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d oficina"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  localstack:
+    image: localstack/localstack:3.8
+    environment:
+      SERVICES: sqs,dynamodb
+      AWS_DEFAULT_REGION: us-east-1
+      QUEUE_PREFIX: oficina-mecanica-dev
+    ports:
+      - 4566:4566
+    volumes:
+      - ./local/localstack/init-aws.sh:/etc/localstack/init/ready.d/init-aws.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "awslocal sqs get-queue-url --queue-name oficina-mecanica-dev-execution-commands && awslocal dynamodb describe-table --table-name oficina-mecanica-dev-executions"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  os-service:
+    build:
+      context: .
+      target: production
+    depends_on:
+      db:
+        condition: service_healthy
+      localstack:
+        condition: service_healthy
+    ports:
+      - 4000:4000
+    environment:
+      <<: *aws-local
+      PORT: 4000
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/oficina?schema=public
+      SQS_ENDPOINT: http://localstack:4566
+      BILLING_SERVICE_URL: http://billing-service:4100
+      EXECUTION_SERVICE_URL: http://exec-prod-service:4200
+    command: sh -c "npx prisma migrate deploy && node prisma/seed.js --if-empty && node src/index.js"
+
+  billing-service:
+    build:
+      context: ../soat-fiap-oficina-mecanica-billing-service
+    depends_on:
+      localstack:
+        condition: service_healthy
+    ports:
+      - 4100:4100
+    environment:
+      <<: *aws-local
+      PORT: 4100
+      SQS_ENDPOINT: http://localstack:4566
+      DYNAMODB_ENDPOINT: http://localstack:4566
+      PAYMENT_GATEWAY: ${PAYMENT_GATEWAY:-fake}
+      MERCADOPAGO_ACCESS_TOKEN: ${MERCADOPAGO_ACCESS_TOKEN:-}
+      MERCADOPAGO_WEBHOOK_SECRET: ${MERCADOPAGO_WEBHOOK_SECRET:-}
+      PUBLIC_BASE_URL: ${BILLING_PUBLIC_BASE_URL:-http://localhost:4100}
+
+  exec-prod-service:
+    build:
+      context: ../soat-fiap-oficina-mecanica-exec-prod
+    depends_on:
+      localstack:
+        condition: service_healthy
+    ports:
+      - 4200:4200
+    environment:
+      <<: *aws-local
+      PORT: 4200
+      SQS_ENDPOINT: http://localstack:4566
+      DYNAMODB_ENDPOINT: http://localstack:4566
+      MAX_ACTIVE_EXECUTIONS: ${MAX_ACTIVE_EXECUTIONS:-10}
+
+volumes:
+  db-data:

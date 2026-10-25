@@ -1,0 +1,72 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: os-service
+  namespace: oficina-mecanica
+  labels:
+    app: os-service
+    app.kubernetes.io/name: os-service
+    app.kubernetes.io/part-of: oficina-mecanica
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: os-service
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: os-service
+        app.kubernetes.io/part-of: oficina-mecanica
+      annotations:
+        # Preenchido pelo CD com o hash do ConfigMap + Secret — mudança de configuração recria os pods
+        checksum/config: "CONFIG_HASH"
+    spec:
+      # Encerramento gracioso: o processo para de consumir a fila e de publicar o
+      # outbox antes de sair (SIGTERM tratado em src/index.js).
+      terminationGracePeriodSeconds: 40
+      initContainers:
+        # prisma migrate deploy é idempotente e usa advisory lock no Postgres —
+        # seguro mesmo com várias réplicas subindo ao mesmo tempo.
+        - name: migrate
+          image: arodri19/oficina-os-service:latest
+          imagePullPolicy: Always
+          command: ["npx", "prisma", "migrate", "deploy"]
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: os-service-secrets
+                  key: DATABASE_URL
+          resources:
+            requests: { cpu: "50m", memory: "64Mi" }
+            limits: { cpu: "200m", memory: "128Mi" }
+      containers:
+        - name: os-service
+          image: arodri19/oficina-os-service:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 4000
+              name: http
+          envFrom:
+            - configMapRef:
+                name: os-service-config
+            - secretRef:
+                name: os-service-secrets
+          readinessProbe:
+            httpGet: { path: /health, port: 4000 }
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            failureThreshold: 6
+          livenessProbe:
+            httpGet: { path: /health, port: 4000 }
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            failureThreshold: 3
+          resources:
+            requests: { cpu: "50m", memory: "128Mi" }
+            limits: { cpu: "300m", memory: "256Mi" }

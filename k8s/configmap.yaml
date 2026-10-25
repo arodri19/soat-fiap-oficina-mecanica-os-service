@@ -1,0 +1,25 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: os-service-config
+  namespace: oficina-mecanica
+  labels:
+    app.kubernetes.io/name: os-service
+    app.kubernetes.io/part-of: oficina-mecanica
+data:
+  PORT: "4000"
+  CORS_ORIGIN: "http://localhost:3000"
+  LOG_LEVEL: "info"
+  NEW_RELIC_APP_NAME: "oficina-os-service"
+  AWS_REGION: "us-east-1"
+  # Prefixo das filas SQS criadas pelo Terraform de cada serviço (<projeto>-<ambiente>).
+  # Sobrescrito pelo pipeline de CD conforme o ambiente alvo.
+  QUEUE_PREFIX: "oficina-mecanica-dev"
+  # REST síncrono via DNS interno do cluster (Service ClusterIP de cada microsserviço)
+  BILLING_SERVICE_URL: "http://billing-service.oficina-mecanica.svc.cluster.local"
+  EXECUTION_SERVICE_URL: "http://exec-prod-service.oficina-mecanica.svc.cluster.local"
+  INTERNAL_HTTP_TIMEOUT_MS: "2000"
+  SAGA_TIMEOUT_BUDGET_MINUTES: "10"
+  SAGA_TIMEOUT_APPROVAL_MINUTES: "4320"
+  SAGA_TIMEOUT_PAYMENT_MINUTES: "2880"
+  SAGA_TIMEOUT_EXECUTION_MINUTES: "10"
