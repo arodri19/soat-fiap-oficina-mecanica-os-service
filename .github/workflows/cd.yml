@@ -1,21 +1,17 @@
 name: CD — Deploy automatizado no Kubernetes (EKS)
 
-# Fase 4: deploy AUTOMÁTICO a cada merge (push) em homologacao/main — o merge só
-# acontece via PR com o CI verde (branches protegidas). Também pode ser disparado
-# manualmente (workflow_dispatch), ex.: para reimplantar uma tag específica.
-#
-# Infra sob demanda (ver ADR 0007 da Fase 3): se o cluster EKS do ambiente não
-# existir no momento do merge, a imagem é publicada mesmo assim e o deploy no
-# cluster é PULADO com aviso — em vez de falhar ou provisionar infraestrutura cara
-# automaticamente.
+# Disparo 100% MANUAL (workflow_dispatch) — mesmo modelo dos repositórios de infra
+# (ADR 0007/0012): push e PR rodam só o CI; nenhum merge implanta nada sozinho.
+# Uma execução é o pipeline completo e automatizado: CI (testes, cobertura, Sonar)
+# → imagem no Docker Hub → Terraform do serviço → deploy no EKS → smoke test.
+# Em "Use workflow from" escolhe-se a branch a implantar. Se o cluster estiver
+# desligado, a imagem é publicada e o deploy é pulado com aviso.
 #
 # Secrets: DOCKERHUB_USERNAME, DOCKERHUB_TOKEN, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY,
 #          DB_PASSWORD, JWT_SECRET, NEW_RELIC_LICENSE_KEY, NEWRELIC_API_KEY, SONAR_TOKEN
-# Variables: AWS_REGION, TF_STATE_BUCKET, DEPLOY_ENVIRONMENT, NEWRELIC_ACCOUNT_ID,
+# Variables: AWS_REGION, TF_STATE_BUCKET, NEWRELIC_ACCOUNT_ID,
 #            SONAR_HOST_URL, SONAR_ORGANIZATION
 on:
-  push:
-    branches: [main, homologacao]
   workflow_dispatch:
     inputs:
       environment:
@@ -31,7 +27,7 @@ concurrency:
 
 env:
   AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
-  TARGET_ENV: ${{ github.event.inputs.environment || vars.DEPLOY_ENVIRONMENT || 'dev' }}
+  TARGET_ENV: ${{ github.event.inputs.environment }}
   DOCKERHUB_REPOSITORY: arodri19/oficina-os-service
   NAMESPACE: oficina-mecanica
 
@@ -78,14 +74,14 @@ jobs:
 
   # ── 3. Infra própria do serviço + deploy no EKS ──────────────────────────────
   deploy:
-    name: Deploy no EKS (${{ github.event.inputs.environment || vars.DEPLOY_ENVIRONMENT || 'dev' }})
+    name: Deploy no EKS (${{ github.event.inputs.environment }})
     runs-on: ubuntu-latest
     needs: build-and-push
     environment: oficina-prd
     env:
-      EKS_CLUSTER_NAME: oficina-mecanica-${{ github.event.inputs.environment || vars.DEPLOY_ENVIRONMENT || 'dev' }}
-      RDS_IDENTIFIER: oficina-mecanica-${{ github.event.inputs.environment || vars.DEPLOY_ENVIRONMENT || 'dev' }}-postgres
-      QUEUE_PREFIX: oficina-mecanica-${{ github.event.inputs.environment || vars.DEPLOY_ENVIRONMENT || 'dev' }}
+      EKS_CLUSTER_NAME: oficina-mecanica-${{ github.event.inputs.environment }}
+      RDS_IDENTIFIER: oficina-mecanica-${{ github.event.inputs.environment }}-postgres
+      QUEUE_PREFIX: oficina-mecanica-${{ github.event.inputs.environment }}
     steps:
       - name: Checkout do código
         uses: actions/checkout@v7.0.1

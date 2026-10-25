@@ -57,7 +57,7 @@ completa em um endpoint, participantes desacoplados entre si, e timeouts por eta
   ([ADR 0010](adr/0010-amazon-sqs-para-mensageria.md)).
 - **CI/CD** independente por repositório: testes (unitários, BDD, integração) com cobertura
   mínima de 80%, SonarQube Quality Gate, imagem no Docker Hub, Terraform do serviço e deploy
-  automático no EKS a cada merge ([ADR 0012](adr/0012-cd-automatico-com-guarda-de-infra.md)).
+  automatizado no EKS, disparado manualmente para controle de custo ([ADR 0012](adr/0012-cd-manual-com-pipeline-automatizado.md)).
 
 ## Cobertura de testes
 
