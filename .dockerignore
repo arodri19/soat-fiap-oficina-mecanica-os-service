@@ -1,0 +1,42 @@
+node_modules
+npm-debug.log*
+
+# ambiente
+.env
+.env.*
+!.env.example
+
+# testes e cobertura
+tests/
+features/
+coverage/
+*.test.js
+*.spec.js
+
+# ferramentas de dev
+.git
+.gitignore
+.eslintrc*
+.prettierrc*
+
+# documentação e arquivos de projeto
+docs/
+docs-fase1/
+*.md
+local/
+k8s/
+terraform/
+.github/
+*.zip
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# build artifacts
+dist/
+build/
+
+# misc
+.scannerwork/

@@ -1,0 +1,6 @@
+@baseUrl = http://localhost:4000/api
+@token = INSIRA_O_TOKEN_AQUI
+
+### Obter Média de Tempo de Execução
+GET {{baseUrl}}/metrics/average-execution-time
+Authorization: Bearer {{token}}

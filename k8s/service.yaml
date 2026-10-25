@@ -1,0 +1,38 @@
+# Exposição pública (atendentes, mecânicos e clientes) via LoadBalancer da AWS.
+apiVersion: v1
+kind: Service
+metadata:
+  name: os-service-public
+  namespace: oficina-mecanica
+  labels:
+    app: os-service
+    app.kubernetes.io/part-of: oficina-mecanica
+spec:
+  type: LoadBalancer
+  selector:
+    app: os-service
+  ports:
+    - name: http
+      port: 80
+      targetPort: 4000
+      protocol: TCP
+---
+# DNS interno (os-service.oficina-mecanica.svc.cluster.local) para chamadas REST
+# entre microsserviços — tráfego que não sai do cluster.
+apiVersion: v1
+kind: Service
+metadata:
+  name: os-service
+  namespace: oficina-mecanica
+  labels:
+    app: os-service
+    app.kubernetes.io/part-of: oficina-mecanica
+spec:
+  type: ClusterIP
+  selector:
+    app: os-service
+  ports:
+    - name: http
+      port: 80
+      targetPort: 4000
+      protocol: TCP

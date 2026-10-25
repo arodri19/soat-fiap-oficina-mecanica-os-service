@@ -1,0 +1,36 @@
+@baseUrl = http://localhost:4000/api
+@token = INSIRA_O_TOKEN_AQUI
+
+### Listar Clientes PF
+GET {{baseUrl}}/clients/pf
+Authorization: Bearer {{token}}
+
+### Criar Cliente PF
+POST {{baseUrl}}/clients/pf
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "name": "João da Silva",
+  "cpf": "123.456.789-00",
+  "email": "joao@email.com",
+  "phone": "11999999999",
+  "address": "Rua Exemplo, 123"
+}
+
+### Listar Clientes PJ
+GET {{baseUrl}}/clients/pj
+Authorization: Bearer {{token}}
+
+### Criar Cliente PJ
+POST {{baseUrl}}/clients/pj
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "name": "Empresa XYZ",
+  "cnpj": "12.345.678/0001-90",
+  "email": "contato@xyz.com",
+  "phone": "11888888888",
+  "address": "Av. Principal, 456"
+}

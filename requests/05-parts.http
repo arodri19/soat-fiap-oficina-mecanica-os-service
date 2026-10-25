@@ -1,0 +1,17 @@
+@baseUrl = http://localhost:4000/api
+@token = INSIRA_O_TOKEN_AQUI
+
+### Listar Peças
+GET {{baseUrl}}/parts
+Authorization: Bearer {{token}}
+
+### Criar Peça
+POST {{baseUrl}}/parts
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "name": "Filtro de Óleo",
+  "price": 45.00,
+  "stockQuantity": 10
+}

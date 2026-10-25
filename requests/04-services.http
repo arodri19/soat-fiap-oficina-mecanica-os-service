@@ -1,0 +1,18 @@
+@baseUrl = http://localhost:4000/api
+@token = INSIRA_O_TOKEN_AQUI
+
+### Listar Serviços
+GET {{baseUrl}}/services
+Authorization: Bearer {{token}}
+
+### Criar Serviço
+POST {{baseUrl}}/services
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "name": "Troca de Óleo",
+  "price": 150.00,
+  "description": "Troca de óleo sintético e filtro",
+  "slaDays": 1
+}
