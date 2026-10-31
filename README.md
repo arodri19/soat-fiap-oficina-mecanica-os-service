@@ -153,10 +153,12 @@ resumo aparece no *job summary*. A análise estática e o Quality Gate rodam no 
 | Workflow | Gatilho | Etapas |
 |---|---|---|
 | [`ci.yml`](.github/workflows/ci.yml) | push em branches de trabalho, PR para `main`/`homologacao` | `npm ci` → migrations num PostgreSQL de serviço → testes unitários + BDD + integração com **cobertura ≥ 80%** → **SonarQube Quality Gate** → build da imagem |
-| [`cd.yml`](.github/workflows/cd.yml) | **merge em `homologacao`/`main`** (automático) ou manual | CI completo → push da imagem no Docker Hub → Terraform do serviço (fila SQS + DLQ + IAM) → `kubectl apply` + rollout + seed (banco vazio) + smoke test |
+| [`cd.yml`](.github/workflows/cd.yml) | **manual** (*Run workflow*, escolhendo branch e ambiente) | CI completo → push da imagem no Docker Hub → Terraform do serviço (fila SQS + DLQ + IAM) → `kubectl apply` + rollout + seed (banco vazio) + smoke test |
 
 Se o cluster EKS estiver desligado (infra sob demanda da Fase 3), o CD publica a imagem e pula
-o deploy com aviso ([ADR 0012](docs/adr/0012-cd-automatico-com-guarda-de-infra.md)).
+o deploy com aviso. O gatilho é manual, igual aos repositórios de infra, para nenhum merge gerar
+custo sem querer — mas a execução é o pipeline completo, sem passos manuais
+([ADR 0012](docs/adr/0012-cd-manual-com-pipeline-automatizado.md)).
 
 **Branches protegidas**: `main` e `homologacao` exigem PR com os checks
 "Testes + Cobertura + SonarQube" e "Build da imagem Docker" verdes (Settings → Branches →
